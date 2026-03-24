@@ -83,9 +83,9 @@ function buildQueryFromSelected(selectedSet) {
  * @param {string} url  the direct arXiv API URL
  * @returns {Promise<Object[]>}
  */
-async function fetchAndParseArticles(url) {
+async function fetchAndParseArticles(url, signal) {
   const fetchUrl = CORS_PROXY ? CORS_PROXY + encodeURIComponent(url) : url;
-  const res = await fetch(fetchUrl);
+  const res = await fetch(fetchUrl, signal ? { signal } : undefined);
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   const text = await res.text();
   return parseAtomXML(text);

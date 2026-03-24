@@ -179,12 +179,16 @@ createApp({
     const activeQuery       = ref('');   // the query string used for the current list
     const activeDate        = ref(null); // Date object
 
-    // Fetch-generation counter: ignore responses from superseded fetches
-    // (prevents out-of-order results when the user navigates prev/next quickly)
-    let fetchGen = 0;
+    // AbortController for the in-flight article list request.
+    // Aborting cancels the network request so the proxy never receives it.
+    let listAbort = null;
 
     async function fetchArticleList(query, date) {
-      const myGen = ++fetchGen;
+      // Cancel any in-flight request before starting a new one
+      if (listAbort) { listAbort.abort(); }
+      listAbort = new AbortController();
+      const signal = listAbort.signal;
+
       loading.value  = true;
       error.value    = null;
       articles.value = [];
@@ -198,17 +202,16 @@ createApp({
 
       try {
         const url     = buildSearchUrl(query, date);
-        const fetched = await fetchAndParseArticles(url);
-        if (myGen !== fetchGen) return; // a newer fetch was started; discard this response
+        const fetched = await fetchAndParseArticles(url, signal);
         const queriedIds = new Set(
           query.split(' OR ').map(s => s.replace('cat:', '').trim())
         );
         articles.value = markCrossLists(fetched, queriedIds);
       } catch (e) {
-        if (myGen !== fetchGen) return;
+        if (e.name === 'AbortError') return; // superseded by a newer navigation; silently drop
         error.value = e.message || 'Failed to fetch articles from arXiv.';
       } finally {
-        if (myGen === fetchGen) loading.value = false;
+        if (!signal.aborted) loading.value = false;
       }
     }
 
