@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="daily arXiv — browse recent preprints by subject area and date" />
+  <title>daily arXiv</title>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- Vue 3 (CDN, no build step required) -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+</head>
+<body>
+
+<div id="app" class="app">
+
+  <!-- ── Site Header ─────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="container">
+      <span class="site-title">
+        daily <strong>arXiv</strong>
+        <span v-if="view === 'selector'">— select topics and dates</span>
+        <span v-else-if="view === 'list'">— {{ listDateLabel }}</span>
+        <span v-else-if="view === 'idlist'">— reading list</span>
+      </span>
+      <button class="header-btn" @click="goReadingList" title="View reading list">
+        &#9733; Saved
+        <span v-if="readingCount > 0" class="count">{{ readingCount }}</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container">
+
+      <!-- ══════════════════════════════════════════════════════
+           SELECTOR VIEW
+      ═══════════════════════════════════════════════════════ -->
+      <div v-if="view === 'selector'">
+
+        <!-- Date picker card -->
+        <div class="card date-card">
+          <div class="date-card-header">
+            <span class="date-card-title">Date</span>
+            <button class="today-btn" @click="goToday">Today</button>
+          </div>
+
+          <!-- Month navigation -->
+          <div class="calendar-nav">
+            <button class="cal-arrow" @click="prevCalMonth" title="Previous month">&#8249;</button>
+            <span class="cal-month-label">{{ calMonthLabel }}</span>
+            <button class="cal-arrow" @click="nextCalMonth" title="Next month">&#8250;</button>
+          </div>
+
+          <!-- Calendar grid -->
+          <div class="calendar-grid">
+            <div class="cal-day-header" v-for="d in ['Su','Mo','Tu','We','Th','Fr','Sa']" :key="d">{{ d }}</div>
+            <template v-for="(cell, idx) in calDays" :key="idx">
+              <div v-if="cell.empty" class="cal-day"></div>
+              <div
+                v-else
+                class="cal-day"
+                :class="{
+                  available: cell.isAvailable,
+                  weekend:   cell.isWeekend,
+                  future:    cell.isFuture && !cell.isWeekend,
+                  today:     cell.isToday && !isSelectedDay(cell),
+                  selected:  isSelectedDay(cell),
+                }"
+                @click="selectCalDay(cell)"
+                :title="cell.isAvailable ? isoDate(cell.date) : ''"
+              >{{ cell.day }}</div>
+            </template>
+          </div>
+
+          <div style="margin-top:10px; font-size:.82rem; color:var(--muted); text-align:center;">
+            Selected: <strong>{{ isoDate(currentDate) }}</strong>
+          </div>
+        </div>
+
+        <!-- Category section -->
+        <div class="cat-section">
+          <div class="cat-notice" v-if="!hasSelections">
+            &#9888; Please select one or more subject areas
+          </div>
+
+          <div class="cat-group" v-for="group in ARXIV_DATABASE" :key="group.id">
+
+            <!-- Group header -->
+            <div class="cat-group-header" @click="toggleGroup(group.id)">
+              <span class="cat-group-name">{{ group.name }}</span>
+              <span v-if="groupSelCount(group) > 0" class="cat-group-count">
+                {{ groupSelCount(group) }} selected
+              </span>
+              <!-- Select/Deselect all (stop propagation so it doesn't toggle accordion) -->
+              <button
+                class="cat-select-all"
+                @click.stop="isGroupAllSelected(group) ? deselectAllGroup(group) : selectAllGroup(group)"
+              >{{ isGroupAllSelected(group) ? 'Deselect all' : 'Select all' }}</button>
+              <span class="cat-chevron" :class="{ open: expandedGroups.has(group.id) }">&#9660;</span>
+            </div>
+
+            <!-- Group body (accordion) -->
+            <div class="cat-group-body" v-if="expandedGroups.has(group.id)">
+              <div class="cat-area" v-for="area in group.subcategories" :key="area.id">
+
+                <!-- Area row -->
+                <div class="cat-area-row">
+                  <!-- Expand/collapse toggle (only if area has sub-areas) -->
+                  <span class="cat-area-toggle" v-if="area.subcategories && area.subcategories.length">
+                    <button style="color:var(--muted);font-size:.75rem;" @click="toggleAreaExpand(area.id)">
+                      {{ expandedAreas.has(area.id) ? '&#9660;' : '&#9658;' }}
+                    </button>
+                  </span>
+                  <span class="cat-area-toggle" v-else></span>
+
+                  <input
+                    type="checkbox"
+                    :checked="isAreaAllSelected(area)"
+                    :indeterminate="isAreaPartial(area)"
+                    @change="toggleArea(area)"
+                  />
+                  <label class="cat-area-label" style="cursor:pointer;" @click="toggleArea(area)">
+                    <span class="cat-area-name">{{ area.name }}</span>
+                    <span class="cat-area-id">{{ area.id }}</span>
+                  </label>
+                  <!-- Expand label click also opens sub-areas -->
+                  <button
+                    v-if="area.subcategories && area.subcategories.length"
+                    style="font-size:.75rem;color:var(--muted);padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:transparent;"
+                    @click="toggleAreaExpand(area.id)"
+                  >{{ area.subcategories.length }} sub&#8209;areas</button>
+                </div>
+
+                <!-- Sub-areas (expanded) -->
+                <div class="cat-subareas" v-if="area.subcategories && area.subcategories.length && expandedAreas.has(area.id)">
+                  <div class="cat-sub-row" v-for="sub in area.subcategories" :key="sub.id">
+                    <input
+                      type="checkbox"
+                      :checked="selectedCats.has(sub.id)"
+                      @change="toggleLeaf(sub.id)"
+                    />
+                    <label class="cat-sub-label" style="cursor:pointer;" @click="toggleLeaf(sub.id)">
+                      <span>{{ sub.name }}</span>
+                      <span class="cat-sub-id">{{ sub.id }}</span>
+                    </label>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div><!-- /group loop -->
+        </div><!-- /cat-section -->
+
+        <!-- Sticky CTA -->
+        <div class="cta-bar" v-if="hasSelections">
+          <span class="cta-summary">
+            <strong>{{ currentDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) }}</strong>
+            &nbsp;&middot;&nbsp; {{ selectionSummary }}
+          </span>
+          <button class="btn-primary" @click="goToList">
+            Show Papers &#8594;
+          </button>
+        </div>
+
+      </div>
+      <!-- /selector view -->
+
+
+      <!-- ══════════════════════════════════════════════════════
+           LIST VIEW
+      ═══════════════════════════════════════════════════════ -->
+      <div v-else-if="view === 'list'">
+
+        <!-- Nav bar -->
+        <div class="list-nav">
+          <div class="list-nav-row">
+            <button class="nav-back" @click="goBack">&#8592; Categories</button>
+          </div>
+          <div class="list-nav-row">
+            <span class="nav-date-label">{{ listDateFull }}</span>
+          </div>
+          <div class="list-nav-row list-nav-day-row">
+            <button class="nav-day-btn today-jump-btn" @click="goLatestDay" :disabled="atLatest">Latest</button>
+            <button class="nav-day-btn" @click="prevDay">&#8592; Prev</button>
+            <button class="nav-day-btn" :disabled="atLatest" @click="nextDay">Next &#8594;</button>
+          </div>
+        </div>
+
+        <!-- Summary row (hidden when 0 results to avoid showing alongside empty-state) -->
+        <div class="list-summary" v-if="!loading && !error && articles.length > 0">
+          <strong>{{ articles.length }} paper{{ articles.length !== 1 ? 's' : '' }}</strong>
+          <div class="summary-cats">
+            <span class="cat-badge" v-for="cat in listCatLabels" :key="cat">{{ cat }}</span>
+          </div>
+          <div class="export-btns">
+            <button class="act-btn" @click="copyMdUrl"          title="Copy a permanent URL that serves this listing as plain Markdown">&#128279; MD URL</button>
+            <button class="act-btn" @click="exportPage('json')" title="Download all papers as JSON">&#8659; JSON</button>
+            <button class="act-btn" @click="exportPage('md')"   title="Download all papers as Markdown">&#8659; MD</button>
+          </div>
+        </div>
+
+        <!-- Loading skeletons -->
+        <template v-if="loading">
+          <div class="card article-card" v-for="n in skeletons" :key="n">
+            <div class="skeleton-line title"></div>
+            <div class="skeleton-line medium"></div>
+            <div class="skeleton-line long"></div>
+            <div class="skeleton-line short"></div>
+          </div>
+        </template>
+
+        <!-- Error -->
+        <div class="card state-box" v-else-if="error">
+          <div class="icon">&#9888;</div>
+          <h3>Failed to load papers</h3>
+          <p>{{ error }}</p>
+          <button class="btn-secondary" @click="retry()">Retry</button>
+        </div>
+
+        <!-- Empty -->
+        <div class="card state-box" v-else-if="articles.length === 0">
+          <div class="icon">&#128196;</div>
+          <h3>No papers found</h3>
+          <p>No listings for this date and category set. Try a different date or add more categories.</p>
+          <button class="btn-secondary" @click="prevDay">&#8592; Previous day</button>
+        </div>
+
+        <!-- Article cards — main submissions -->
+        <template v-else>
+          <div class="section-label" v-if="mainArticles.length > 0 && crosslistArticles.length > 0">
+            New submissions ({{ mainArticles.length }})
+          </div>
+
+          <div
+            class="card article-card"
+            v-for="article in mainArticles"
+            :key="article.id"
+            :class="{ 'abstract-open': isExpanded(article.id) }"
+          >
+            <div class="article-header">
+              <div class="article-badges">
+                <span class="cat-badge">{{ article.primaryCategory }}</span>
+              </div>
+              <div class="article-title" @click="toggleAbstract(article.id)">{{ article.title }}</div>
+            </div>
+
+            <!-- Authors -->
+            <div class="article-authors">
+              <span class="authors-truncated">{{ article.authorsDisplay.short }}</span>
+              <span class="authors-expanded">{{ article.authorsDisplay.full }}</span>
+            </div>
+
+            <!-- Abstract (shown when expanded) -->
+            <div class="article-abstract">{{ article.abstract }}</div>
+
+            <!-- Action buttons -->
+            <div class="article-actions">
+              <button class="act-btn abstract-toggle" @click="toggleAbstract(article.id)">
+                {{ isExpanded(article.id) ? '&#9650; Hide' : '&#9660; Abstract' }}
+              </button>
+              <a class="act-btn" :href="article.absUrl" target="_blank" rel="noopener">&#128196; Abstract</a>
+              <a class="act-btn" :href="article.pdfUrl" target="_blank" rel="noopener">&#128462; PDF</a>
+              <a v-if="article.htmlUrl" class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
+              <button class="act-btn share-btn" @click="shareArticle(article)" title="Share abstract link">
+                &#8679; Share
+              </button>
+              <span class="actions-spacer"></span>
+              <button
+                class="act-btn"
+                :class="{ bookmarked: isBookmarked(article.id) }"
+                @click="toggleBookmark(article.id)"
+                :title="isBookmarked(article.id) ? 'Remove from reading list' : 'Save to reading list'"
+              >{{ isBookmarked(article.id) ? '&#9733; Saved' : '&#9734; Save' }}</button>
+            </div>
+          </div>
+
+          <!-- Cross-listed section -->
+          <template v-if="crosslistArticles.length > 0">
+            <div class="section-label">Cross-listings ({{ crosslistArticles.length }})</div>
+            <div
+              class="card article-card crosslist"
+              v-for="article in crosslistArticles"
+              :key="article.id"
+              :class="{ 'abstract-open': isExpanded(article.id) }"
+            >
+              <div class="article-header">
+                <div class="article-badges">
+                  <span class="cat-badge crosslist">{{ article.primaryCategory }}</span>
+                </div>
+                <div class="article-title" @click="toggleAbstract(article.id)">{{ article.title }}</div>
+              </div>
+
+              <div class="article-authors">
+                <span class="authors-truncated">{{ article.authorsDisplay.short }}</span>
+                <span class="authors-expanded">{{ article.authorsDisplay.full }}</span>
+              </div>
+
+              <div class="article-abstract">{{ article.abstract }}</div>
+
+              <div class="article-actions">
+                <button class="act-btn abstract-toggle" @click="toggleAbstract(article.id)">
+                  {{ isExpanded(article.id) ? '&#9650; Hide' : '&#9660; Abstract' }}
+                </button>
+                <a class="act-btn" :href="article.absUrl" target="_blank" rel="noopener">&#128196; Abstract</a>
+                <a class="act-btn" :href="article.pdfUrl" target="_blank" rel="noopener">&#128462; PDF</a>
+                <a v-if="article.htmlUrl" class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
+                <button class="act-btn share-btn" @click="shareArticle(article)">&#8679; Share</button>
+                <span class="actions-spacer"></span>
+                <button
+                  class="act-btn"
+                  :class="{ bookmarked: isBookmarked(article.id) }"
+                  @click="toggleBookmark(article.id)"
+                >{{ isBookmarked(article.id) ? '&#9733; Saved' : '&#9734; Save' }}</button>
+              </div>
+            </div>
+          </template>
+
+        </template><!-- /articles -->
+
+      </div>
+      <!-- /list view -->
+
+
+      <!-- ══════════════════════════════════════════════════════
+           ID LIST VIEW (reading list / shared link)
+      ═══════════════════════════════════════════════════════ -->
+      <div v-else-if="view === 'idlist'">
+
+        <div class="list-nav">
+          <button class="nav-back" @click="goBack">&#8592; Categories</button>
+        </div>
+
+        <div class="reading-list-header">
+          <h2>&#9733; Reading List</h2>
+          <button class="share-list-btn" @click="shareReadingList" v-if="readingListShareUrl">
+            &#8679; Share List
+          </button>
+          <a class="email-btn" :href="emailLink" v-if="emailLink">&#9993; Email</a>
+          <template v-if="idListArticles.length > 0">
+            <button class="act-btn" @click="exportPage('json')" title="Download reading list as JSON">&#8659; JSON</button>
+            <button class="act-btn" @click="exportPage('md')"   title="Download reading list as Markdown">&#8659; MD</button>
+          </template>
+        </div>
+
+        <!-- Loading -->
+        <template v-if="idListLoading">
+          <div class="card article-card" v-for="n in skeletons" :key="n">
+            <div class="skeleton-line title"></div>
+            <div class="skeleton-line medium"></div>
+            <div class="skeleton-line short"></div>
+          </div>
+        </template>
+
+        <!-- Error -->
+        <div class="card state-box" v-else-if="idListError">
+          <div class="icon">&#9888;</div>
+          <h3>Failed to load</h3>
+          <p>{{ idListError }}</p>
+        </div>
+
+        <!-- Empty reading list -->
+        <div class="card state-box" v-else-if="idListArticles.length === 0 && !idListLoading">
+          <div class="icon">&#9734;</div>
+          <h3>Reading list is empty</h3>
+          <p>Save papers from the article list and they'll appear here.</p>
+          <button class="btn-secondary" @click="goBack">Browse papers</button>
+        </div>
+
+        <!-- Articles -->
+        <div
+          class="card article-card"
+          v-for="article in idListArticles"
+          :key="article.id"
+          :class="{ 'abstract-open': isExpanded(article.id) }"
+        >
+          <div class="article-header">
+            <div class="article-badges">
+              <span class="cat-badge">{{ article.primaryCategory }}</span>
+            </div>
+            <div class="article-title" @click="toggleAbstract(article.id)">{{ article.title }}</div>
+          </div>
+
+          <div class="article-authors">
+            <span class="authors-truncated">{{ article.authorsDisplay.short }}</span>
+            <span class="authors-expanded">{{ article.authorsDisplay.full }}</span>
+          </div>
+
+          <div class="article-abstract">{{ article.abstract }}</div>
+
+          <div class="article-actions">
+            <button class="act-btn abstract-toggle" @click="toggleAbstract(article.id)">
+              {{ isExpanded(article.id) ? '&#9650; Hide' : '&#9660; Abstract' }}
+            </button>
+            <a class="act-btn" :href="article.absUrl" target="_blank" rel="noopener">&#128196; Abstract</a>
+            <a class="act-btn" :href="article.pdfUrl" target="_blank" rel="noopener">&#128462; PDF</a>
+            <a v-if="article.htmlUrl" class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
+            <button class="act-btn share-btn" @click="shareArticle(article)">&#8679; Share</button>
+            <span class="actions-spacer"></span>
+            <button
+              class="act-btn"
+              :class="{ bookmarked: isBookmarked(article.id) }"
+              @click="toggleBookmark(article.id)"
+            >{{ isBookmarked(article.id) ? '&#9733; Saved' : '&#9734; Save' }}</button>
+          </div>
+        </div>
+
+      </div>
+      <!-- /idlist view -->
+
+
+      <!-- ══════════════════════════════════════════════════════
+           MARKDOWN VIEW  (#/md?query=...&date=...)
+           Renders raw markdown for LLM ingestion / direct linking
+      ═══════════════════════════════════════════════════════ -->
+      <div v-else-if="view === 'mdview'" class="mdview">
+        <div v-if="mdviewLoading" class="card state-box"><div class="icon">&#8987;</div><p>Fetching papers…</p></div>
+        <div v-else-if="mdviewError" class="card state-box"><div class="icon">&#9888;</div><p>{{ mdviewError }}</p></div>
+        <template v-else>
+          <div class="mdview-toolbar">
+            <button class="act-btn" @click="copyMdUrl" title="Copy this URL">&#128279; Copy URL</button>
+            <button class="act-btn" @click="downloadMdview" title="Download as file">&#8659; Download</button>
+          </div>
+          <pre class="mdview-pre">{{ mdviewContent }}</pre>
+        </template>
+      </div>
+      <!-- /mdview -->
+
+    </div><!-- /container -->
+  </main>
+
+  <!-- Toast notification -->
+  <transition name="toast">
+    <div class="toast" v-if="toast">{{ toast }}</div>
+  </transition>
+
+</div><!-- /#app -->
+
+<!-- Scripts — order matters (global scope, no modules) -->
+<script src="js/date-utils.js"></script>
+<script src="js/arxiv-database.js"></script>
+<script src="js/arxiv-api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
