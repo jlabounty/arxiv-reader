@@ -263,6 +263,10 @@ createApp({
       if (!activeDate.value) return true;
       return isoDate(activeDate.value) >= isoDate(latestArxivDay());
     });
+    function goLatestDay() {
+      const hash = parseHash();
+      pushHash('list', { query: hash.query || activeQuery.value, date: isoDate(latestArxivDay()) });
+    }
 
     const listDateLabel = computed(() =>
       activeDate.value ? formatShortDate(activeDate.value) : ''
@@ -531,7 +535,7 @@ createApp({
       // Articles
       articles, loading, error, skeletons,
       mainArticles, crosslistArticles, listCatLabels,
-      listDateLabel, listDateFull, atLatest,
+      listDateLabel, listDateFull, atLatest, goLatestDay,
       activeQuery, activeDate,
       expandedAbstracts,
       toggleAbstract, isExpanded,
