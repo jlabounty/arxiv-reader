@@ -384,7 +384,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   flex-wrap: wrap;
 }
 .list-summary strong { color: var(--text); }
-.summary-cats { display: flex; flex-wrap: wrap; gap: 4px; }
+.summary-cats { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+.export-btns { display: flex; gap: 4px; margin-left: auto; }
 .cat-badge {
   font-size: .72rem;
   font-weight: 600;

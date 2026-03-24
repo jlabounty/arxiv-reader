@@ -322,6 +322,59 @@ createApp({
       toastTimer = setTimeout(() => { toast.value = null; }, 2000);
     }
 
+    /* ── Export ─────────────────────────────────────────────────── */
+    function exportPage(format) {
+      const arts = view.value === 'idlist' ? idListArticles.value : articles.value;
+      if (arts.length === 0) return;
+
+      const dateLabel = view.value === 'list' && activeDate.value
+        ? isoDate(activeDate.value)
+        : 'reading-list';
+
+      let content, mime, ext;
+
+      if (format === 'json') {
+        content = JSON.stringify(arts.map(a => ({
+          id:              a.id,
+          title:           a.title,
+          authors:         a.authors,
+          primaryCategory: a.primaryCategory,
+          categories:      a.categories,
+          abstract:        a.abstract,
+          absUrl:          a.absUrl,
+          pdfUrl:          a.pdfUrl,
+          ...(a.htmlUrl ? { htmlUrl: a.htmlUrl } : {}),
+        })), null, 2);
+        mime = 'application/json';
+        ext  = 'json';
+      } else {
+        const heading = view.value === 'list'
+          ? `# arXiv Papers — ${listDateFull.value}\n\nCategories: ${listCatLabels.value.join(', ')}\n\n`
+          : '# arXiv Reading List\n\n';
+        content = heading + arts.map(a => [
+          `## ${a.title}`,
+          '',
+          `**Authors:** ${a.authors.join(', ')}`,
+          `**Category:** ${a.primaryCategory}`,
+          `**arXiv:** ${a.absUrl}`,
+          '',
+          a.abstract,
+          '',
+          '---',
+        ].join('\n')).join('\n\n');
+        mime = 'text/markdown';
+        ext  = 'md';
+      }
+
+      const blob = new Blob([content], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = `arxiv-${dateLabel}.${ext}`;
+      anchor.click();
+      URL.revokeObjectURL(blobUrl);
+    }
+
     /* ── Share ──────────────────────────────────────────────────── */
     async function shareArticle(article) {
       try {
@@ -412,6 +465,8 @@ createApp({
       readingListShareUrl,
       emailLink,
       shareReadingList,
+      // Export
+      exportPage,
       // Toast & share
       toast, shareArticle,
       // Utils (used in template)

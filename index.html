@@ -189,6 +189,10 @@
           <div class="summary-cats">
             <span class="cat-badge" v-for="cat in listCatLabels" :key="cat">{{ cat }}</span>
           </div>
+          <div class="export-btns">
+            <button class="act-btn" @click="exportPage('json')" title="Download all papers as JSON">&#8659; JSON</button>
+            <button class="act-btn" @click="exportPage('md')"   title="Download all papers as Markdown">&#8659; MD</button>
+          </div>
         </div>
 
         <!-- Loading skeletons -->
@@ -328,6 +332,10 @@
             &#8679; Share List
           </button>
           <a class="email-btn" :href="emailLink" v-if="emailLink">&#9993; Email</a>
+          <template v-if="idListArticles.length > 0">
+            <button class="act-btn" @click="exportPage('json')" title="Download reading list as JSON">&#8659; JSON</button>
+            <button class="act-btn" @click="exportPage('md')"   title="Download reading list as Markdown">&#8659; MD</button>
+          </template>
         </div>
 
         <!-- Loading -->
