@@ -252,7 +252,7 @@
               </button>
               <a class="act-btn" :href="article.absUrl" target="_blank" rel="noopener">&#128196; Abstract</a>
               <a class="act-btn" :href="article.pdfUrl" target="_blank" rel="noopener">&#128462; PDF</a>
-              <a class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
+              <a v-if="article.htmlUrl" class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
               <button class="act-btn share-btn" @click="shareArticle(article)" title="Share abstract link">
                 &#8679; Share
               </button>
@@ -295,7 +295,7 @@
                 </button>
                 <a class="act-btn" :href="article.absUrl" target="_blank" rel="noopener">&#128196; Abstract</a>
                 <a class="act-btn" :href="article.pdfUrl" target="_blank" rel="noopener">&#128462; PDF</a>
-                <a class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
+                <a v-if="article.htmlUrl" class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
                 <button class="act-btn share-btn" @click="shareArticle(article)">&#8679; Share</button>
                 <span class="actions-spacer"></span>
                 <button
@@ -381,7 +381,7 @@
             </button>
             <a class="act-btn" :href="article.absUrl" target="_blank" rel="noopener">&#128196; Abstract</a>
             <a class="act-btn" :href="article.pdfUrl" target="_blank" rel="noopener">&#128462; PDF</a>
-            <a class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
+            <a v-if="article.htmlUrl" class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
             <button class="act-btn share-btn" @click="shareArticle(article)">&#8679; Share</button>
             <span class="actions-spacer"></span>
             <button

@@ -134,20 +134,20 @@ function parseAtomXML(xmlText) {
       }
     }
 
-    // Links
-    let absUrl = '', pdfUrl = '';
+    // Links — arXiv Atom feed includes rel="related" title="html" only when an
+    // HTML version exists, so use that as the source-of-truth for availability.
+    let absUrl = '', pdfUrl = '', htmlUrl = null;
     for (const link of entry.querySelectorAll('link')) {
       const rel   = link.getAttribute('rel');
       const title = link.getAttribute('title');
       const href  = (link.getAttribute('href') || '').replace('http://', 'https://');
       if (rel === 'alternate') absUrl = href;
       if (title === 'pdf')     pdfUrl = href;
+      if (title === 'html')    htmlUrl = href;
     }
-    // Fallback
+    // Fallback for abs/pdf
     if (!absUrl) absUrl = `https://arxiv.org/abs/${id}`;
     if (!pdfUrl) pdfUrl = `https://arxiv.org/pdf/${id}`;
-
-    const htmlUrl = `https://ar5iv.labs.arxiv.org/abs/${id}`;
 
     articles.push({
       id,
