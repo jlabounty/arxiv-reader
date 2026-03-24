@@ -265,7 +265,7 @@ createApp({
     });
     function goLatestDay() {
       const hash = parseHash();
-      pushHash('list', { query: hash.query || activeQuery.value, date: isoDate(latestArxivDay()) });
+      pushHash('list', { query: hash.query || activeQuery.value, date: 'latest' });
     }
 
     const listDateLabel = computed(() =>
@@ -482,7 +482,8 @@ createApp({
 
       if (route.view === 'list' && route.query && route.date) {
         activeQuery.value = route.query;
-        await fetchArticleList(route.query, dateFromIso(route.date));
+        const resolvedDate = route.date === 'latest' ? isoDate(latestArxivDay()) : route.date;
+        await fetchArticleList(route.query, dateFromIso(resolvedDate));
       } else if (route.view === 'idlist' && route.ids) {
         await fetchIdList(route.ids.split(',').filter(Boolean));
       } else if (route.view === 'mdview' && route.query && route.date) {
