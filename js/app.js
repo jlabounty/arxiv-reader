@@ -366,12 +366,20 @@ createApp({
         ext  = 'md';
       }
 
+      const filename = `arxiv-${dateLabel}.${ext}`;
+
+      // Prefer the native share sheet (mobile) — lets the user copy/paste directly.
+      // Fall back to a blob download on desktop where share is unavailable.
+      if (navigator.share) {
+        navigator.share({ title: filename, text: content }).catch(() => {});
+        return;
+      }
+
       const blob = new Blob([content], { type: mime });
       const blobUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = blobUrl;
-      anchor.download = `arxiv-${dateLabel}.${ext}`;
-      // Must be in the DOM for mobile browsers (iOS Safari ignores detached clicks)
+      anchor.download = filename;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
