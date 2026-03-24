@@ -177,11 +177,17 @@
 
         <!-- Nav bar -->
         <div class="list-nav">
-          <button class="nav-back" @click="goBack">&#8592; Categories</button>
-          <span class="nav-date-label">{{ listDateFull }}</span>
-          <button class="nav-day-btn today-jump-btn" @click="goLatestDay" :disabled="atLatest">Latest</button>
-          <button class="nav-day-btn" @click="prevDay">&#8592; Prev</button>
-          <button class="nav-day-btn" :disabled="atLatest" @click="nextDay">Next &#8594;</button>
+          <div class="list-nav-row">
+            <button class="nav-back" @click="goBack">&#8592; Categories</button>
+          </div>
+          <div class="list-nav-row">
+            <span class="nav-date-label">{{ listDateFull }}</span>
+          </div>
+          <div class="list-nav-row list-nav-day-row">
+            <button class="nav-day-btn today-jump-btn" @click="goLatestDay" :disabled="atLatest">Latest</button>
+            <button class="nav-day-btn" @click="prevDay">&#8592; Prev</button>
+            <button class="nav-day-btn" :disabled="atLatest" @click="nextDay">Next &#8594;</button>
+          </div>
         </div>
 
         <!-- Summary row (hidden when 0 results to avoid showing alongside empty-state) -->

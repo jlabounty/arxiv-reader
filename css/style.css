@@ -332,10 +332,17 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* ── List Nav Bar ───────────────────────────────────────────────── */
 .list-nav {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
   padding: 12px 0;
-  flex-wrap: wrap;
+}
+.list-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
 }
 .nav-back {
   display: flex;
@@ -352,9 +359,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .nav-back:hover { color: var(--text); border-color: #bbb; }
 .nav-date-label {
-  font-weight: 600;
-  font-size: .95rem;
-  flex: 1;
+  font-weight: 700;
+  font-size: 1.05rem;
   text-align: center;
 }
 .nav-day-btn {
@@ -598,7 +604,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .container { padding: 0 12px; }
   .article-card { padding: 14px; }
   .date-card { padding: 14px; }
-  .nav-date-label { font-size: .85rem; }
+
   .site-title { font-size: 1.1rem; }
   .cal-day { font-size: .78rem; }
   .article-title { font-size: .95rem; }
