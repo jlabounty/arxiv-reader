@@ -3,6 +3,15 @@
 const ARXIV_API = 'https://export.arxiv.org/api/query';
 const MAX_RESULTS = 800;
 
+// export.arxiv.org does not serve Access-Control-Allow-Origin headers, so direct
+// browser fetch is blocked by CORS policy on any cross-origin page (e.g. GitHub Pages).
+// We route requests through corsproxy.io, a free open CORS proxy, which forwards the
+// request server-side and relays the response with the necessary CORS header.
+//
+// To run locally without the proxy:  set CORS_PROXY = ''
+// To use a self-hosted proxy:        set CORS_PROXY to your proxy's prefix URL
+const CORS_PROXY = 'https://corsproxy.io/?url=';
+
 /**
  * Build the arXiv API search URL for a category query string and a date.
  * @param {string} query  e.g. "cat:hep-ex OR cat:hep-ph"
@@ -70,11 +79,13 @@ function buildQueryFromSelected(selectedSet) {
 
 /**
  * Fetch articles from the arXiv API and parse the Atom XML response.
- * @param {string} url
+ * Routes through CORS_PROXY when set (required for GitHub Pages deployments).
+ * @param {string} url  the direct arXiv API URL
  * @returns {Promise<Object[]>}
  */
 async function fetchAndParseArticles(url) {
-  const res = await fetch(url);
+  const fetchUrl = CORS_PROXY ? CORS_PROXY + encodeURIComponent(url) : url;
+  const res = await fetch(fetchUrl);
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   const text = await res.text();
   return parseAtomXML(text);
