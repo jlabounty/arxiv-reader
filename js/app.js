@@ -371,7 +371,10 @@ createApp({
       const anchor = document.createElement('a');
       anchor.href = blobUrl;
       anchor.download = `arxiv-${dateLabel}.${ext}`;
+      // Must be in the DOM for mobile browsers (iOS Safari ignores detached clicks)
+      document.body.appendChild(anchor);
       anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(blobUrl);
     }
 
