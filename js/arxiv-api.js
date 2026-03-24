@@ -5,14 +5,24 @@ const MAX_RESULTS = 800;
 
 /**
  * Build the arXiv API search URL for a category query string and a date.
- * @param {string} query  e.g. "cat:hep-ex+OR+cat:hep-ph"
+ * @param {string} query  e.g. "cat:hep-ex OR cat:hep-ph"
  * @param {Date}   date   the date whose listings to fetch
+ *
+ * Uses URLSearchParams so that brackets, colons, and parens are properly
+ * percent-encoded — raw `[` / `]` in query strings cause fetch() to throw
+ * a TypeError in some browser environments.
  */
 function buildSearchUrl(query, date) {
   const d = formatQueryDate(date);
-  const range = `${d}0000+TO+${d}2359`;
-  const searchQuery = `(${query})+AND+lastUpdatedDate:[${range}]`;
-  return `${ARXIV_API}?search_query=${searchQuery}&max_results=${MAX_RESULTS}&sortBy=submittedDate&sortOrder=descending`;
+  // Spaces in the query become + (form-encoded) which arXiv treats as AND/OR separators
+  const searchQuery = `(${query}) AND lastUpdatedDate:[${d}0000 TO ${d}2359]`;
+  const params = new URLSearchParams({
+    search_query: searchQuery,
+    max_results:  String(MAX_RESULTS),
+    sortBy:       'submittedDate',
+    sortOrder:    'descending',
+  });
+  return `${ARXIV_API}?${params.toString()}`;
 }
 
 /**
@@ -20,7 +30,11 @@ function buildSearchUrl(query, date) {
  * @param {string[]} ids  clean arXiv IDs like ["2401.12345", "2401.67890"]
  */
 function buildIdListUrl(ids) {
-  return `${ARXIV_API}?id_list=${ids.join(',')}&max_results=${MAX_RESULTS}`;
+  const params = new URLSearchParams({
+    id_list:     ids.join(','),
+    max_results: String(MAX_RESULTS),
+  });
+  return `${ARXIV_API}?${params.toString()}`;
 }
 
 /**
@@ -51,7 +65,7 @@ function buildQueryFromSelected(selectedSet) {
     }
   }
 
-  return [...result].map(id => `cat:${id}`).join('+OR+');
+  return [...result].map(id => `cat:${id}`).join(' OR ');
 }
 
 /**

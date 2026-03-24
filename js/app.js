@@ -165,7 +165,7 @@ createApp({
     const selectionSummary = computed(() => {
       const q = buildQueryFromSelected(selectedCats.value);
       if (!q) return '';
-      const cats = q.split('+OR+').map(s => s.replace('cat:', ''));
+      const cats = q.split(' OR ').map(s => s.replace('cat:', ''));
       if (cats.length <= 3) return cats.join(', ');
       return `${cats.slice(0, 3).join(', ')} +${cats.length - 3} more`;
     });
@@ -195,7 +195,7 @@ createApp({
         const fetched = await fetchAndParseArticles(url);
         // For cross-list detection, expand the query back into individual IDs
         const queriedIds = new Set(
-          query.split('+OR+').map(s => s.replace('cat:', '').trim())
+          query.split(' OR ').map(s => s.replace('cat:', '').trim())
         );
         articles.value = markCrossLists(fetched, queriedIds);
       } catch (e) {
@@ -348,7 +348,7 @@ createApp({
     );
     const listCatLabels = computed(() => {
       if (!activeQuery.value) return [];
-      return activeQuery.value.split('+OR+').map(s => s.replace('cat:', ''));
+      return activeQuery.value.split(' OR ').map(s => s.replace('cat:', ''));
     });
 
     /* ── Hash routing ─────────────────────────────────────────── */
@@ -400,6 +400,7 @@ createApp({
       expandedAbstracts,
       toggleAbstract, isExpanded,
       articleAuthors,
+      retry: () => { if (activeQuery.value && activeDate.value) fetchArticleList(activeQuery.value, activeDate.value); },
       // Navigation
       goToList, goBack, prevDay, nextDay,
       // Reading list
