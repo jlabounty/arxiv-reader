@@ -4,7 +4,7 @@ A modern, fully static arXiv preprint browser — deployable on GitHub Pages wit
 build tooling.
 
 Browse recent papers by subject area and date. Save a reading list, share individual
-abstracts, or send your saved papers by email.
+abstracts, or export the day's papers for LLM ingestion.
 
 ---
 
@@ -13,12 +13,20 @@ abstracts, or send your saved papers by email.
 - **Category browser** — full arXiv subject tree with accordion groups and per-area
   sub-category selection
 - **Calendar date picker** — click any past weekday to jump to that day's listings
+- **Latest button** — jump directly to the most recent available archive date from
+  anywhere in the date navigator
 - **Article cards** — title, truncated author list (expandable), abstract on demand,
   category badge, and cross-listing detection
 - **Per-article actions** — Abstract page, PDF download, HTML5 viewer (ar5iv), and
   one-click Share (native share sheet on mobile, clipboard fallback on desktop)
 - **Reading list** — bookmark papers with ★; list persists across sessions via
   `localStorage`; shareable via URL (`#/id_list?ids=...`) and email
+- **Export** — download the day's paper list as JSON or Markdown; share via the
+  Web Share API on mobile, direct download on desktop
+- **Permanent Markdown URL** — `#/md` route returns a stable URL for the current
+  day's Markdown export, suitable for bookmarking or piping into an LLM
+- **Bookmarkable latest** — `#/list?date=latest` always resolves to the most recent
+  archive date, making it safe to bookmark
 - **No server required** — the arXiv API already serves permissive CORS headers,
   so all requests go directly from the browser to `export.arxiv.org`
 - **No build step** — Vue 3 is loaded from a CDN `<script>` tag; just open
