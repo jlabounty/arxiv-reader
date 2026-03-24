@@ -143,6 +143,7 @@ function parseAtomXML(xmlText) {
       title,
       abstract,
       authors,
+      authorsDisplay: truncateAuthors(authors), // precomputed — avoids double call in template
       categories,
       primaryCategory,
       absUrl,

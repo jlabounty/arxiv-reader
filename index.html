@@ -183,8 +183,8 @@
           <button class="nav-day-btn" :disabled="atLatest" @click="nextDay">Next &#8594;</button>
         </div>
 
-        <!-- Summary row -->
-        <div class="list-summary" v-if="!loading && !error">
+        <!-- Summary row (hidden when 0 results to avoid showing alongside empty-state) -->
+        <div class="list-summary" v-if="!loading && !error && articles.length > 0">
           <strong>{{ articles.length }} paper{{ articles.length !== 1 ? 's' : '' }}</strong>
           <div class="summary-cats">
             <span class="cat-badge" v-for="cat in listCatLabels" :key="cat">{{ cat }}</span>
@@ -238,8 +238,8 @@
 
             <!-- Authors -->
             <div class="article-authors">
-              <span class="authors-truncated">{{ articleAuthors(article).short }}</span>
-              <span class="authors-expanded">{{ articleAuthors(article).full }}</span>
+              <span class="authors-truncated">{{ article.authorsDisplay.short }}</span>
+              <span class="authors-expanded">{{ article.authorsDisplay.full }}</span>
             </div>
 
             <!-- Abstract (shown when expanded) -->
@@ -283,8 +283,8 @@
               </div>
 
               <div class="article-authors">
-                <span class="authors-truncated">{{ articleAuthors(article).short }}</span>
-                <span class="authors-expanded">{{ articleAuthors(article).full }}</span>
+                <span class="authors-truncated">{{ article.authorsDisplay.short }}</span>
+                <span class="authors-expanded">{{ article.authorsDisplay.full }}</span>
               </div>
 
               <div class="article-abstract">{{ article.abstract }}</div>
@@ -369,8 +369,8 @@
           </div>
 
           <div class="article-authors">
-            <span class="authors-truncated">{{ articleAuthors(article).short }}</span>
-            <span class="authors-expanded">{{ articleAuthors(article).full }}</span>
+            <span class="authors-truncated">{{ article.authorsDisplay.short }}</span>
+            <span class="authors-expanded">{{ article.authorsDisplay.full }}</span>
           </div>
 
           <div class="article-abstract">{{ article.abstract }}</div>

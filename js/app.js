@@ -34,7 +34,6 @@ createApp({
     }
 
     /* ── Calendar state ───────────────────────────────────────── */
-    const today = new Date();
     const initialDate = latestArxivDay();
 
     const currentDate = ref(initialDate);
@@ -52,9 +51,10 @@ createApp({
       else calMonth.value--;
     }
     function nextCalMonth() {
-      // Don't navigate beyond current month
+      // Don't navigate beyond current month (covers year boundary too)
       const now = new Date();
-      if (calYear.value === now.getFullYear() && calMonth.value === now.getMonth()) return;
+      if (calYear.value > now.getFullYear() ||
+          (calYear.value === now.getFullYear() && calMonth.value >= now.getMonth())) return;
       if (calMonth.value === 11) { calMonth.value = 0; calYear.value++; }
       else calMonth.value++;
     }
@@ -171,14 +171,19 @@ createApp({
     });
 
     /* ── Article list state ───────────────────────────────────── */
-    const articles         = ref([]);
-    const loading          = ref(false);
-    const error            = ref(null);
+    const articles          = ref([]);
+    const loading           = ref(false);
+    const error             = ref(null);
     const expandedAbstracts = ref(new Set());
-    const activeQuery      = ref('');   // the query string used for the current list
-    const activeDate       = ref(null); // Date object
+    const activeQuery       = ref('');   // the query string used for the current list
+    const activeDate        = ref(null); // Date object
+
+    // Fetch-generation counter: ignore responses from superseded fetches
+    // (prevents out-of-order results when the user navigates prev/next quickly)
+    let fetchGen = 0;
 
     async function fetchArticleList(query, date) {
+      const myGen = ++fetchGen;
       loading.value  = true;
       error.value    = null;
       articles.value = [];
@@ -193,15 +198,16 @@ createApp({
       try {
         const url     = buildSearchUrl(query, date);
         const fetched = await fetchAndParseArticles(url);
-        // For cross-list detection, expand the query back into individual IDs
+        if (myGen !== fetchGen) return; // a newer fetch was started; discard this response
         const queriedIds = new Set(
           query.split(' OR ').map(s => s.replace('cat:', '').trim())
         );
         articles.value = markCrossLists(fetched, queriedIds);
       } catch (e) {
+        if (myGen !== fetchGen) return;
         error.value = e.message || 'Failed to fetch articles from arXiv.';
       } finally {
-        loading.value = false;
+        if (myGen === fetchGen) loading.value = false;
       }
     }
 
@@ -336,10 +342,6 @@ createApp({
     }
 
     /* ── Helpers for template ─────────────────────────────────── */
-    function articleAuthors(article) {
-      return truncateAuthors(article.authors);
-    }
-
     const mainArticles = computed(() =>
       articles.value.filter(a => !a.isCrosslist)
     );
@@ -399,7 +401,6 @@ createApp({
       activeQuery, activeDate,
       expandedAbstracts,
       toggleAbstract, isExpanded,
-      articleAuthors,
       retry: () => { if (activeQuery.value && activeDate.value) fetchArticleList(activeQuery.value, activeDate.value); },
       // Navigation
       goToList, goBack, prevDay, nextDay,
