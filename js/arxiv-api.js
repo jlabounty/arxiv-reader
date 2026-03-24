@@ -135,6 +135,8 @@ function parseAtomXML(xmlText) {
     }
 
     // Links — parse abs, pdf, and html refs from the Atom feed.
+    // The API only includes title="html" when an HTML version actually exists,
+    // so treat its presence/absence as the authoritative signal.
     let absUrl = '', pdfUrl = '', htmlUrl = null;
     for (const link of entry.querySelectorAll('link')) {
       const rel   = link.getAttribute('rel');
@@ -147,13 +149,6 @@ function parseAtomXML(xmlText) {
     // Fallback for abs/pdf
     if (!absUrl) absUrl = `https://arxiv.org/abs/${id}`;
     if (!pdfUrl) pdfUrl = `https://arxiv.org/pdf/${id}`;
-    // The API omits the html link inconsistently even when HTML is available.
-    // arXiv has generated HTML for all submissions since ~Nov 2023 (YYMM ≥ 2311).
-    // Infer the URL from the ID for those papers when the API doesn't tell us.
-    if (!htmlUrl) {
-      const yymm = id.slice(0, 4); // "2603" from "2603.21667"
-      if (yymm >= '2311') htmlUrl = `https://arxiv.org/html/${id}`;
-    }
 
     articles.push({
       id,
