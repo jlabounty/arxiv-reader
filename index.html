@@ -190,6 +190,7 @@
             <span class="cat-badge" v-for="cat in listCatLabels" :key="cat">{{ cat }}</span>
           </div>
           <div class="export-btns">
+            <button class="act-btn" @click="copyMdUrl"          title="Copy a permanent URL that serves this listing as plain Markdown">&#128279; MD URL</button>
             <button class="act-btn" @click="exportPage('json')" title="Download all papers as JSON">&#8659; JSON</button>
             <button class="act-btn" @click="exportPage('md')"   title="Download all papers as Markdown">&#8659; MD</button>
           </div>
@@ -402,6 +403,24 @@
 
       </div>
       <!-- /idlist view -->
+
+
+      <!-- ══════════════════════════════════════════════════════
+           MARKDOWN VIEW  (#/md?query=...&date=...)
+           Renders raw markdown for LLM ingestion / direct linking
+      ═══════════════════════════════════════════════════════ -->
+      <div v-else-if="view === 'mdview'" class="mdview">
+        <div v-if="mdviewLoading" class="card state-box"><div class="icon">&#8987;</div><p>Fetching papers…</p></div>
+        <div v-else-if="mdviewError" class="card state-box"><div class="icon">&#9888;</div><p>{{ mdviewError }}</p></div>
+        <template v-else>
+          <div class="mdview-toolbar">
+            <button class="act-btn" @click="copyMdUrl" title="Copy this URL">&#128279; Copy URL</button>
+            <button class="act-btn" @click="downloadMdview" title="Download as file">&#8659; Download</button>
+          </div>
+          <pre class="mdview-pre">{{ mdviewContent }}</pre>
+        </template>
+      </div>
+      <!-- /mdview -->
 
     </div><!-- /container -->
   </main>

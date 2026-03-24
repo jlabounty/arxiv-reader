@@ -532,6 +532,21 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .toast-enter-active, .toast-leave-active { transition: all .25s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(16px); }
 
+/* ── Markdown View ──────────────────────────────────────────────── */
+.mdview-toolbar { display: flex; gap: 8px; padding: 10px 0 14px; }
+.mdview-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .82rem;
+  line-height: 1.6;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  color: var(--text);
+}
+
 /* ── Reading List View ──────────────────────────────────────────── */
 .reading-list-header {
   display: flex;

@@ -8,7 +8,7 @@ const STORAGE_KEY_READING = 'dailyarxiv.readingList';
 createApp({
   setup() {
     /* ── Routing ──────────────────────────────────────────────── */
-    const view = ref('selector'); // 'selector' | 'list' | 'idlist'
+    const view = ref('selector'); // 'selector' | 'list' | 'idlist' | 'mdview'
 
     function parseHash() {
       const raw   = window.location.hash.replace(/^#/, '');
@@ -19,6 +19,7 @@ createApp({
 
       if (path === '/list')    return { view: 'list',     query: params.get('query') || '', date: params.get('date') || '' };
       if (path === '/id_list') return { view: 'idlist',   ids:   params.get('ids')   || '' };
+      if (path === '/md')      return { view: 'mdview',   query: params.get('query') || '', date: params.get('date') || '' };
       return { view: 'selector' };
     }
 
@@ -405,6 +406,59 @@ createApp({
       }
     }
 
+    /* ── Markdown view ──────────────────────────────────────────── */
+    const mdviewContent  = ref('');
+    const mdviewLoading  = ref(false);
+    const mdviewError    = ref(null);
+    const mdviewQuery    = ref('');
+    const mdviewDate     = ref('');
+
+    function buildMarkdown(arts, query, dateStr) {
+      const cats = query.split(' OR ').map(s => s.replace('cat:', '')).join(', ');
+      const heading = `# arXiv Papers — ${dateStr}\n\nCategories: ${cats}\n\n`;
+      return heading + arts.map(a => [
+        `## ${a.title}`,
+        '',
+        `**Authors:** ${a.authors.join(', ')}`,
+        `**Category:** ${a.primaryCategory}`,
+        `**arXiv:** ${a.absUrl}`,
+        '',
+        a.abstract,
+        '',
+        '---',
+      ].join('\n')).join('\n\n');
+    }
+
+    // The permanent URL for the current list as a markdown view
+    const mdviewUrl = computed(() => {
+      if (!activeQuery.value || !activeDate.value) return '';
+      const p = new URLSearchParams({ query: activeQuery.value, date: isoDate(activeDate.value) });
+      return `${location.origin}${location.pathname}#/md?${p.toString()}`;
+    });
+
+    async function copyMdUrl() {
+      if (!mdviewUrl.value) return;
+      try {
+        const result = await shareUrl(mdviewUrl.value, 'arXiv markdown view');
+        if (result === 'copied') showToast('Markdown URL copied!');
+      } catch (_) {
+        showToast('Could not copy URL');
+      }
+    }
+
+    function downloadMdview() {
+      if (!mdviewContent.value) return;
+      const blob   = new Blob([mdviewContent.value], { type: 'text/markdown' });
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = `arxiv-${mdviewDate.value}.md`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(blobUrl);
+    }
+
     /* ── Helpers for template ─────────────────────────────────── */
     const mainArticles = computed(() =>
       articles.value.filter(a => !a.isCrosslist)
@@ -427,6 +481,22 @@ createApp({
         await fetchArticleList(route.query, dateFromIso(route.date));
       } else if (route.view === 'idlist' && route.ids) {
         await fetchIdList(route.ids.split(',').filter(Boolean));
+      } else if (route.view === 'mdview' && route.query && route.date) {
+        mdviewQuery.value = route.query;
+        mdviewDate.value  = route.date;
+        mdviewLoading.value = true;
+        mdviewError.value   = null;
+        mdviewContent.value = '';
+        try {
+          const url  = buildSearchUrl(route.query, dateFromIso(route.date));
+          const arts = await fetchAndParseArticles(url);
+          mdviewContent.value = buildMarkdown(arts, route.query, route.date);
+          document.title = `arXiv MD — ${route.date}`;
+        } catch (e) {
+          mdviewError.value = e.message || 'Failed to fetch articles.';
+        } finally {
+          mdviewLoading.value = false;
+        }
       }
     }
 
@@ -478,6 +548,8 @@ createApp({
       shareReadingList,
       // Export
       exportPage,
+      // Markdown view
+      mdviewContent, mdviewLoading, mdviewError, mdviewUrl, copyMdUrl, downloadMdview,
       // Toast & share
       toast, shareArticle,
       // Utils (used in template)
