@@ -21,12 +21,17 @@ abstracts, or export the day's papers for LLM ingestion.
   one-click Share (native share sheet on mobile, clipboard fallback on desktop)
 - **Reading list** — bookmark papers with ★; list persists across sessions via
   `localStorage`; shareable via URL (`#/id_list?ids=...`) and email
-- **Export** — download the day's paper list as JSON or Markdown; share via the
-  Web Share API on mobile, direct download on desktop
+- **Category filter** — click category chips in the list view to show/hide papers
+  from specific categories without a new API call; count updates to "X of Y papers"
+  when filtered; resets on date navigation
+- **Export** — download the day's paper list as JSON or Markdown (honours active
+  category filter); share via the Web Share API on mobile, direct download on desktop
 - **Permanent Markdown URL** — `#/md` route returns a stable URL for the current
   day's Markdown export, suitable for bookmarking or piping into an LLM
 - **Bookmarkable latest** — `#/list?date=latest` always resolves to the most recent
   archive date, making it safe to bookmark
+- **Rate-limit safe** — in-flight requests are cancelled via `AbortController` when
+  the user navigates before a fetch completes, preventing 429s from the CORS proxy
 - **No server required** — the arXiv API already serves permissive CORS headers,
   so all requests go directly from the browser to `export.arxiv.org`
 - **No build step** — Vue 3 is loaded from a CDN `<script>` tag; just open
