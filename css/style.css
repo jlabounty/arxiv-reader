@@ -405,6 +405,25 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   background: #f0f0f0;
   color: var(--muted);
 }
+.cat-filter-btn {
+  font-size: .72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--red-pale);
+  color: var(--red);
+  font-family: monospace;
+  border: none;
+  cursor: pointer;
+  transition: opacity var(--transition), background var(--transition);
+}
+.cat-filter-btn:hover { opacity: .8; }
+.cat-filter-btn.inactive {
+  background: #e8e8e8;
+  color: var(--muted);
+  opacity: .55;
+}
+.cat-filter-btn.inactive:hover { opacity: .8; }
 
 /* ── Article Card ───────────────────────────────────────────────── */
 .article-card {

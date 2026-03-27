@@ -192,14 +192,22 @@
 
         <!-- Summary row (hidden when 0 results to avoid showing alongside empty-state) -->
         <div class="list-summary" v-if="!loading && !error && articles.length > 0">
-          <strong>{{ articles.length }} paper{{ articles.length !== 1 ? 's' : '' }}</strong>
+          <strong v-if="catFilter === null">{{ articles.length }} paper{{ articles.length !== 1 ? 's' : '' }}</strong>
+          <strong v-else>{{ filteredArticles.length }} of {{ articles.length }} paper{{ articles.length !== 1 ? 's' : '' }}</strong>
           <div class="summary-cats">
-            <span class="cat-badge" v-for="cat in listCatLabels" :key="cat">{{ cat }}</span>
+            <button
+              class="cat-filter-btn"
+              :class="{ inactive: !isCatFilterActive(cat) }"
+              v-for="cat in listCatLabels"
+              :key="cat"
+              @click="toggleCatFilter(cat)"
+              :title="isCatFilterActive(cat) ? 'Hide ' + cat : 'Show ' + cat"
+            >{{ cat }}</button>
           </div>
           <div class="export-btns">
             <button class="act-btn" @click="copyMdUrl"          title="Copy a permanent URL that serves this listing as plain Markdown">&#128279; MD URL</button>
-            <button class="act-btn" @click="exportPage('json')" title="Download all papers as JSON">&#8659; JSON</button>
-            <button class="act-btn" @click="exportPage('md')"   title="Download all papers as Markdown">&#8659; MD</button>
+            <button class="act-btn" @click="exportPage('json')" title="Download filtered papers as JSON">&#8659; JSON</button>
+            <button class="act-btn" @click="exportPage('md')"   title="Download filtered papers as Markdown">&#8659; MD</button>
           </div>
         </div>
 

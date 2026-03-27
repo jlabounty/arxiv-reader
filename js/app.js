@@ -178,6 +178,7 @@ createApp({
     const expandedAbstracts = ref(new Set());
     const activeQuery       = ref('');   // the query string used for the current list
     const activeDate        = ref(null); // Date object
+    const catFilter         = ref(null); // null = all shown; Set<string> = only these cats
 
     // AbortController for the in-flight article list request.
     // Aborting cancels the network request so the proxy never receives it.
@@ -192,6 +193,7 @@ createApp({
       loading.value  = true;
       error.value    = null;
       articles.value = [];
+      catFilter.value   = null;
       activeQuery.value = query;
       activeDate.value  = date;
 
@@ -332,7 +334,7 @@ createApp({
 
     /* ── Export ─────────────────────────────────────────────────── */
     function exportPage(format) {
-      const arts = view.value === 'idlist' ? idListArticles.value : articles.value;
+      const arts = view.value === 'idlist' ? idListArticles.value : filteredArticles.value;
       if (arts.length === 0) return;
 
       const dateLabel = view.value === 'list' && activeDate.value
@@ -467,16 +469,40 @@ createApp({
     }
 
     /* ── Helpers for template ─────────────────────────────────── */
-    const mainArticles = computed(() =>
-      articles.value.filter(a => !a.isCrosslist)
-    );
-    const crosslistArticles = computed(() =>
-      articles.value.filter(a => a.isCrosslist)
-    );
     const listCatLabels = computed(() => {
       if (!activeQuery.value) return [];
       return activeQuery.value.split(' OR ').map(s => s.replace('cat:', ''));
     });
+
+    function catMatchesFilter(primaryCategory, filterSet) {
+      if (filterSet.has(primaryCategory)) return true;
+      for (const cat of filterSet) {
+        if (primaryCategory.startsWith(cat + '.')) return true;
+      }
+      return false;
+    }
+
+    const filteredArticles = computed(() => {
+      if (!catFilter.value) return articles.value;
+      return articles.value.filter(a => catMatchesFilter(a.primaryCategory, catFilter.value));
+    });
+
+    const mainArticles = computed(() =>
+      filteredArticles.value.filter(a => !a.isCrosslist)
+    );
+    const crosslistArticles = computed(() =>
+      filteredArticles.value.filter(a => a.isCrosslist)
+    );
+
+    function toggleCatFilter(cat) {
+      const current = catFilter.value ?? new Set(listCatLabels.value);
+      const next = new Set(current);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      catFilter.value = next.size === listCatLabels.value.length ? null : next;
+    }
+    function isCatFilterActive(cat) {
+      return catFilter.value === null || catFilter.value.has(cat);
+    }
 
     /* ── Hash routing ─────────────────────────────────────────── */
     async function handleRoute() {
@@ -538,7 +564,8 @@ createApp({
       getLeafIds,
       // Articles
       articles, loading, error, skeletons,
-      mainArticles, crosslistArticles, listCatLabels,
+      mainArticles, crosslistArticles, listCatLabels, filteredArticles,
+      catFilter, toggleCatFilter, isCatFilterActive,
       listDateLabel, listDateFull, atLatest, goLatestDay,
       activeQuery, activeDate,
       expandedAbstracts,
