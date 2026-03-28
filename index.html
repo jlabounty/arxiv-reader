@@ -226,6 +226,9 @@
           <div class="icon">&#9888;</div>
           <h3>Failed to load papers</h3>
           <p>{{ error }}</p>
+          <p v-if="error && error.includes('rate-limit')" class="error-hint">
+            The free CORS proxy has a request quota. Waiting a moment before retrying usually resolves this.
+          </p>
           <button class="btn-secondary" @click="retry()">Retry</button>
         </div>
 

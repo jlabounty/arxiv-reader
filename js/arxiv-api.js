@@ -86,7 +86,12 @@ function buildQueryFromSelected(selectedSet) {
 async function fetchAndParseArticles(url, signal) {
   const fetchUrl = CORS_PROXY ? CORS_PROXY + encodeURIComponent(url) : url;
   const res = await fetch(fetchUrl, signal ? { signal } : undefined);
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error('The CORS proxy (corsproxy.io) is rate-limiting requests. Wait a few seconds and retry.');
+    }
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
   const text = await res.text();
   return parseAtomXML(text);
 }

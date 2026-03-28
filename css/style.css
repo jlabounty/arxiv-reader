@@ -526,6 +526,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .state-box .icon { font-size: 2.5rem; margin-bottom: 10px; }
 .state-box h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
 .state-box p { font-size: .875rem; max-width: 320px; margin: 0 auto 16px; }
+.state-box .error-hint { font-size: .78rem; color: var(--muted); font-style: italic; margin-top: -8px; }
 .btn-secondary {
   font-size: .85rem;
   font-weight: 600;
