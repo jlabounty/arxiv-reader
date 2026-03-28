@@ -207,24 +207,12 @@ createApp({
         query.split(' OR ').map(s => s.replace('cat:', '').trim())
       );
 
-      // One automatic retry on 429 after a 3 s backoff
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const fetched = await fetchAndParseArticles(url, signal);
-          articles.value = markCrossLists(fetched, queriedIds);
-          break; // success — exit retry loop
-        } catch (e) {
-          if (e.name === 'AbortError') return;
-          const is429 = e.message && e.message.includes('rate-limit');
-          if (is429 && attempt === 0) {
-            // Brief pause then try once more
-            await new Promise(res => setTimeout(res, 3000));
-            if (signal.aborted) return;
-            continue;
-          }
-          error.value = e.message || 'Failed to fetch articles from arXiv.';
-          break;
-        }
+      try {
+        const fetched = await fetchAndParseArticles(url, signal);
+        articles.value = markCrossLists(fetched, queriedIds);
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        error.value = e.message || 'Failed to fetch articles from arXiv.';
       }
 
       if (!signal.aborted) loading.value = false;

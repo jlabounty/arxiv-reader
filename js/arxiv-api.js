@@ -5,12 +5,22 @@ const MAX_RESULTS = 800;
 
 // export.arxiv.org does not serve Access-Control-Allow-Origin headers, so direct
 // browser fetch is blocked by CORS policy on any cross-origin page (e.g. GitHub Pages).
-// We route requests through corsproxy.io, a free open CORS proxy, which forwards the
-// request server-side and relays the response with the necessary CORS header.
-//
-// To run locally without the proxy:  set CORS_PROXY = ''
-// To use a self-hosted proxy:        set CORS_PROXY to your proxy's prefix URL
-const CORS_PROXY = 'https://corsproxy.io/?url=';
+// We try a list of free CORS proxies in order, remembering the last one that worked.
+// '' (empty) = direct fetch — succeeds in local dev, fails silently on GitHub Pages.
+const PROXY_LIST = [
+  'https://corsproxy.io/?url=',
+  'https://api.allorigins.win/raw?url=',
+  '', // direct — works locally without any proxy
+];
+
+// Persist the index of the last working proxy across page loads.
+const PROXY_STORAGE_KEY = 'dailyarxiv.proxyIdx';
+let _proxyIdx = (() => {
+  try {
+    const v = parseInt(localStorage.getItem(PROXY_STORAGE_KEY) || '0', 10);
+    return isNaN(v) || v >= PROXY_LIST.length ? 0 : v;
+  } catch (_) { return 0; }
+})();
 
 /**
  * Build the arXiv API search URL for a category query string and a date.
@@ -80,20 +90,47 @@ function buildQueryFromSelected(selectedSet) {
 /**
  * Fetch articles from the arXiv API and parse the Atom XML response.
  * Routes through CORS_PROXY when set (required for GitHub Pages deployments).
+ * Tries each proxy in PROXY_LIST starting from the last known-good one.
+ * On success, remembers that proxy for next time. On failure, moves to the next.
  * @param {string} url  the direct arXiv API URL
+ * @param {AbortSignal} [signal]
  * @returns {Promise<Object[]>}
  */
 async function fetchAndParseArticles(url, signal) {
-  const fetchUrl = CORS_PROXY ? CORS_PROXY + encodeURIComponent(url) : url;
-  const res = await fetch(fetchUrl, signal ? { signal } : undefined);
-  if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error('The CORS proxy (corsproxy.io) is rate-limiting requests. Wait a few seconds and retry.');
+  let lastErr = null;
+
+  for (let i = 0; i < PROXY_LIST.length; i++) {
+    const idx = (_proxyIdx + i) % PROXY_LIST.length;
+    const proxy = PROXY_LIST[idx];
+    const fetchUrl = proxy ? proxy + encodeURIComponent(url) : url;
+
+    try {
+      const res = await fetch(fetchUrl, signal ? { signal } : undefined);
+      if (!res.ok) {
+        const label = proxy ? new URL(proxy).hostname : 'arxiv.org (direct)';
+        lastErr = new Error(
+          res.status === 429
+            ? `${label} is rate-limiting requests (HTTP 429). Trying next option…`
+            : `HTTP ${res.status} from ${label}`
+        );
+        continue; // try next proxy
+      }
+      const text = await res.text();
+      const articles = parseAtomXML(text);
+      // Remember this proxy as working
+      if (idx !== _proxyIdx) {
+        _proxyIdx = idx;
+        try { localStorage.setItem(PROXY_STORAGE_KEY, String(idx)); } catch (_) {}
+      }
+      return articles;
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      lastErr = e;
+      // Network/CORS error — try next proxy
     }
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   }
-  const text = await res.text();
-  return parseAtomXML(text);
+
+  throw lastErr || new Error('All CORS proxies failed. Try again later.');
 }
 
 /**
