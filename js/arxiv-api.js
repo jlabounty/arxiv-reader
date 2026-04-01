@@ -32,7 +32,10 @@ let _proxyIdx = (() => {
  * a TypeError in some browser environments.
  */
 function buildSearchUrl(query, date) {
-  const d = formatQueryDate(date);
+  // arXiv papers announced on day D have lastUpdatedDate = D-1 (submitted the prior day).
+  // Query with the previous arXiv day so the results match the displayed date.
+  const queryDate = previousArxivDay(date);
+  const d = formatQueryDate(queryDate);
   // Spaces in the query become + (form-encoded) which arXiv treats as AND/OR separators
   const searchQuery = `(${query}) AND lastUpdatedDate:[${d}0000 TO ${d}2359]`;
   const params = new URLSearchParams({
