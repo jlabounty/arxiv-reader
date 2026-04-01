@@ -2,11 +2,30 @@
 
 const { createApp, ref, computed, watch, onMounted } = Vue;
 
-const STORAGE_KEY_CATS    = 'dailyarxiv.categories';
-const STORAGE_KEY_READING = 'dailyarxiv.readingList';
+const STORAGE_KEY_CATS          = 'dailyarxiv.categories';
+const STORAGE_KEY_READING       = 'dailyarxiv.readingList';
+const STORAGE_KEY_READING_DATES = 'dailyarxiv.readingDates';
+const STORAGE_KEY_READ          = 'dailyarxiv.read';
+const STORAGE_KEY_THEME         = 'dailyarxiv.theme';
 
 createApp({
   setup() {
+    /* ── Dark mode ────────────────────────────────────────────── */
+    const darkMode = ref(false);
+    function toggleDarkMode() {
+      darkMode.value = !darkMode.value;
+      document.documentElement.setAttribute('data-theme', darkMode.value ? 'dark' : 'light');
+      try { localStorage.setItem(STORAGE_KEY_THEME, darkMode.value ? 'dark' : 'light'); } catch (_) {}
+    }
+    function loadTheme() {
+      try {
+        if (localStorage.getItem(STORAGE_KEY_THEME) === 'dark') {
+          darkMode.value = true;
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      } catch (_) {}
+    }
+
     /* ── Routing ──────────────────────────────────────────────── */
     const view = ref('selector'); // 'selector' | 'list' | 'idlist' | 'mdview'
 
@@ -179,6 +198,7 @@ createApp({
     const activeQuery       = ref('');   // the query string used for the current list
     const activeDate        = ref(null); // Date object
     const catFilter         = ref(null); // null = all shown; Set<string> = only these cats
+    const keywordFilter     = ref('');   // free-text filter on title+abstract
 
     // AbortController for the in-flight article list request.
     // Aborting cancels the network request so the proxy never receives it.
@@ -193,8 +213,9 @@ createApp({
       loading.value  = true;
       error.value    = null;
       articles.value = [];
-      catFilter.value   = null;
-      activeQuery.value = query;
+      catFilter.value    = null;
+      keywordFilter.value = '';
+      activeQuery.value  = query;
       activeDate.value  = date;
 
       // Sync calendar to the fetched date
@@ -237,10 +258,33 @@ createApp({
       }
     }
 
+    /* ── Mark as read ─────────────────────────────────────────── */
+    const readArticles = ref(new Set());
+
+    function loadReadArticles() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_READ);
+        if (raw) readArticles.value = new Set(JSON.parse(raw));
+      } catch (_) {}
+    }
+    function markRead(id) {
+      if (readArticles.value.has(id)) return;
+      const s = new Set(readArticles.value);
+      s.add(id);
+      readArticles.value = s;
+      try { localStorage.setItem(STORAGE_KEY_READ, JSON.stringify([...s])); } catch (_) {}
+    }
+    function isRead(id) { return readArticles.value.has(id); }
+
     /* ── Abstract expand / collapse ──────────────────────────── */
     function toggleAbstract(id) {
       const s = new Set(expandedAbstracts.value);
-      s.has(id) ? s.delete(id) : s.add(id);
+      if (s.has(id)) {
+        s.delete(id);
+      } else {
+        s.add(id);
+        markRead(id); // opening the abstract marks it as read
+      }
       expandedAbstracts.value = s;
     }
     function isExpanded(id) { return expandedAbstracts.value.has(id); }
@@ -282,26 +326,55 @@ createApp({
     );
 
     /* ── Reading list ─────────────────────────────────────────── */
-    const readingList = ref(new Set());
+    const readingList      = ref(new Set());
+    const readingListDates = ref(new Map()); // id -> YYYY-MM-DD
 
     function saveReadingList() {
-      try { localStorage.setItem(STORAGE_KEY_READING, JSON.stringify([...readingList.value])); }
-      catch (_) {}
+      try {
+        localStorage.setItem(STORAGE_KEY_READING, JSON.stringify([...readingList.value]));
+        localStorage.setItem(STORAGE_KEY_READING_DATES, JSON.stringify([...readingListDates.value]));
+      } catch (_) {}
     }
     function loadReadingList() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY_READING);
         if (raw) readingList.value = new Set(JSON.parse(raw));
+        const rawDates = localStorage.getItem(STORAGE_KEY_READING_DATES);
+        if (rawDates) readingListDates.value = new Map(JSON.parse(rawDates));
       } catch (_) {}
     }
 
     function toggleBookmark(id) {
-      const s = new Set(readingList.value);
-      s.has(id) ? s.delete(id) : s.add(id);
-      readingList.value = s;
+      const s     = new Set(readingList.value);
+      const dates = new Map(readingListDates.value);
+      if (s.has(id)) {
+        s.delete(id);
+        dates.delete(id);
+      } else {
+        s.add(id);
+        // Record the displayed date (or today if unavailable)
+        dates.set(id, activeDate.value ? isoDate(activeDate.value) : isoDate(new Date()));
+      }
+      readingList.value      = s;
+      readingListDates.value = dates;
       saveReadingList();
     }
     function isBookmarked(id) { return readingList.value.has(id); }
+
+    // Group idListArticles by saved date for the reading list view
+    const idListByDate = computed(() => {
+      const grouped = new Map();
+      for (const article of idListArticles.value) {
+        const date = readingListDates.value.get(article.id) || '';
+        if (!grouped.has(date)) grouped.set(date, []);
+        grouped.get(date).push(article);
+      }
+      return [...grouped.entries()].sort((a, b) => {
+        if (!a[0]) return 1;  // unknown dates sink to bottom
+        if (!b[0]) return -1;
+        return b[0].localeCompare(a[0]); // descending
+      });
+    });
 
     const readingCount = computed(() => readingList.value.size);
 
@@ -484,8 +557,18 @@ createApp({
     }
 
     const filteredArticles = computed(() => {
-      if (!catFilter.value) return articles.value;
-      return articles.value.filter(a => catMatchesFilter(a.primaryCategory, catFilter.value));
+      let result = articles.value;
+      if (catFilter.value) {
+        result = result.filter(a => catMatchesFilter(a.primaryCategory, catFilter.value));
+      }
+      if (keywordFilter.value.trim()) {
+        const kw = keywordFilter.value.trim().toLowerCase();
+        result = result.filter(a =>
+          a.title.toLowerCase().includes(kw) ||
+          a.abstract.toLowerCase().includes(kw)
+        );
+      }
+      return result;
     });
 
     const mainArticles = computed(() =>
@@ -540,8 +623,10 @@ createApp({
 
     /* ── Mount ────────────────────────────────────────────────── */
     onMounted(() => {
+      loadTheme();
       loadCategories();
       loadReadingList();
+      loadReadArticles();
       handleRoute();
     });
 
@@ -568,10 +653,12 @@ createApp({
       articles, loading, error, skeletons,
       mainArticles, crosslistArticles, listCatLabels, filteredArticles,
       catFilter, toggleCatFilter, isCatFilterActive,
+      keywordFilter,
       listDateLabel, listDateFull, atLatest, goLatestDay,
       activeQuery, activeDate,
       expandedAbstracts,
       toggleAbstract, isExpanded,
+      isRead,
       retry: () => { if (activeQuery.value && activeDate.value) fetchArticleList(activeQuery.value, activeDate.value); },
       // Navigation
       goToList, goBack, prevDay, nextDay,
@@ -579,7 +666,7 @@ createApp({
       readingList, readingCount,
       toggleBookmark, isBookmarked,
       goReadingList,
-      idListArticles, idListLoading, idListError,
+      idListArticles, idListLoading, idListError, idListByDate,
       readingListShareUrl,
       emailLink,
       shareReadingList,
@@ -587,10 +674,12 @@ createApp({
       exportPage,
       // Markdown view
       mdviewContent, mdviewLoading, mdviewError, mdviewUrl, copyMdUrl, downloadMdview,
+      // Dark mode
+      darkMode, toggleDarkMode,
       // Toast & share
       toast, shareArticle,
       // Utils (used in template)
-      isoDate, formatDisplayDate,
+      isoDate, formatDisplayDate, dateFromIso,
     };
   },
 }).mount('#app');
