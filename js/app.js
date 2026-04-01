@@ -517,16 +517,17 @@ createApp({
       } else if (route.view === 'idlist' && route.ids) {
         await fetchIdList(route.ids.split(',').filter(Boolean));
       } else if (route.view === 'mdview' && route.query && route.date) {
+        const resolvedMdDate = route.date === 'latest' ? isoDate(latestArxivDay()) : route.date;
         mdviewQuery.value = route.query;
-        mdviewDate.value  = route.date;
+        mdviewDate.value  = resolvedMdDate;
         mdviewLoading.value = true;
         mdviewError.value   = null;
         mdviewContent.value = '';
         try {
-          const url  = buildSearchUrl(route.query, dateFromIso(route.date));
+          const url  = buildSearchUrl(route.query, dateFromIso(resolvedMdDate));
           const arts = await fetchAndParseArticles(url);
-          mdviewContent.value = buildMarkdown(arts, route.query, route.date);
-          document.title = `arXiv MD — ${route.date}`;
+          mdviewContent.value = buildMarkdown(arts, route.query, resolvedMdDate);
+          document.title = `arXiv MD — ${resolvedMdDate}`;
         } catch (e) {
           mdviewError.value = e.message || 'Failed to fetch articles.';
         } finally {

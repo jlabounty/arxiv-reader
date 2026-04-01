@@ -177,9 +177,7 @@ function parseAtomXML(xmlText) {
     }
 
     // Links — parse abs, pdf, and html refs from the Atom feed.
-    // The API only includes title="html" when an HTML version actually exists,
-    // so treat its presence/absence as the authoritative signal.
-    let absUrl = '', pdfUrl = '', htmlUrl = null;
+    let absUrl = '', pdfUrl = '', htmlUrl = '';
     for (const link of entry.querySelectorAll('link')) {
       const rel   = link.getAttribute('rel');
       const title = link.getAttribute('title');
@@ -188,9 +186,10 @@ function parseAtomXML(xmlText) {
       if (title === 'pdf')     pdfUrl = href;
       if (title === 'html')    htmlUrl = href;
     }
-    // Fallback for abs/pdf
-    if (!absUrl) absUrl = `https://arxiv.org/abs/${id}`;
-    if (!pdfUrl) pdfUrl = `https://arxiv.org/pdf/${id}`;
+    // Fallback URLs — always present so buttons are always shown
+    if (!absUrl)  absUrl  = `https://arxiv.org/abs/${id}`;
+    if (!pdfUrl)  pdfUrl  = `https://arxiv.org/pdf/${id}`;
+    if (!htmlUrl) htmlUrl = `https://arxiv.org/html/${id}`;
 
     articles.push({
       id,
