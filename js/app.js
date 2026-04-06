@@ -2,11 +2,30 @@
 
 const { createApp, ref, computed, watch, onMounted } = Vue;
 
-const STORAGE_KEY_CATS    = 'dailyarxiv.categories';
-const STORAGE_KEY_READING = 'dailyarxiv.readingList';
+const STORAGE_KEY_CATS          = 'dailyarxiv.categories';
+const STORAGE_KEY_READING       = 'dailyarxiv.readingList';
+const STORAGE_KEY_READING_DATES = 'dailyarxiv.readingDates';
+const STORAGE_KEY_READ          = 'dailyarxiv.read';
+const STORAGE_KEY_THEME         = 'dailyarxiv.theme';
 
 createApp({
   setup() {
+    /* ── Dark mode ────────────────────────────────────────────── */
+    const darkMode = ref(false);
+    function toggleDarkMode() {
+      darkMode.value = !darkMode.value;
+      document.documentElement.setAttribute('data-theme', darkMode.value ? 'dark' : 'light');
+      try { localStorage.setItem(STORAGE_KEY_THEME, darkMode.value ? 'dark' : 'light'); } catch (_) {}
+    }
+    function loadTheme() {
+      try {
+        if (localStorage.getItem(STORAGE_KEY_THEME) === 'dark') {
+          darkMode.value = true;
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      } catch (_) {}
+    }
+
     /* ── Routing ──────────────────────────────────────────────── */
     const view = ref('selector'); // 'selector' | 'list' | 'idlist' | 'mdview'
 
@@ -178,17 +197,25 @@ createApp({
     const expandedAbstracts = ref(new Set());
     const activeQuery       = ref('');   // the query string used for the current list
     const activeDate        = ref(null); // Date object
+    const catFilter         = ref(null); // null = all shown; Set<string> = only these cats
+    const keywordFilter     = ref('');   // free-text filter on title+abstract
 
-    // Fetch-generation counter: ignore responses from superseded fetches
-    // (prevents out-of-order results when the user navigates prev/next quickly)
-    let fetchGen = 0;
+    // AbortController for the in-flight article list request.
+    // Aborting cancels the network request so the proxy never receives it.
+    let listAbort = null;
 
     async function fetchArticleList(query, date) {
-      const myGen = ++fetchGen;
+      // Cancel any in-flight request before starting a new one
+      if (listAbort) { listAbort.abort(); }
+      listAbort = new AbortController();
+      const signal = listAbort.signal;
+
       loading.value  = true;
       error.value    = null;
       articles.value = [];
-      activeQuery.value = query;
+      catFilter.value    = null;
+      keywordFilter.value = '';
+      activeQuery.value  = query;
       activeDate.value  = date;
 
       // Sync calendar to the fetched date
@@ -196,20 +223,20 @@ createApp({
       calYear.value  = date.getFullYear();
       calMonth.value = date.getMonth();
 
+      const url = buildSearchUrl(query, date);
+      const queriedIds = new Set(
+        query.split(' OR ').map(s => s.replace('cat:', '').trim())
+      );
+
       try {
-        const url     = buildSearchUrl(query, date);
-        const fetched = await fetchAndParseArticles(url);
-        if (myGen !== fetchGen) return; // a newer fetch was started; discard this response
-        const queriedIds = new Set(
-          query.split(' OR ').map(s => s.replace('cat:', '').trim())
-        );
+        const fetched = await fetchAndParseArticles(url, signal);
         articles.value = markCrossLists(fetched, queriedIds);
       } catch (e) {
-        if (myGen !== fetchGen) return;
+        if (e.name === 'AbortError') return;
         error.value = e.message || 'Failed to fetch articles from arXiv.';
-      } finally {
-        if (myGen === fetchGen) loading.value = false;
       }
+
+      if (!signal.aborted) loading.value = false;
     }
 
     /* ── ID List (reading list / shared link) ─────────────────── */
@@ -231,10 +258,33 @@ createApp({
       }
     }
 
+    /* ── Mark as read ─────────────────────────────────────────── */
+    const readArticles = ref(new Set());
+
+    function loadReadArticles() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_READ);
+        if (raw) readArticles.value = new Set(JSON.parse(raw));
+      } catch (_) {}
+    }
+    function markRead(id) {
+      if (readArticles.value.has(id)) return;
+      const s = new Set(readArticles.value);
+      s.add(id);
+      readArticles.value = s;
+      try { localStorage.setItem(STORAGE_KEY_READ, JSON.stringify([...s])); } catch (_) {}
+    }
+    function isRead(id) { return readArticles.value.has(id); }
+
     /* ── Abstract expand / collapse ──────────────────────────── */
     function toggleAbstract(id) {
       const s = new Set(expandedAbstracts.value);
-      s.has(id) ? s.delete(id) : s.add(id);
+      if (s.has(id)) {
+        s.delete(id);
+      } else {
+        s.add(id);
+        markRead(id); // opening the abstract marks it as read
+      }
       expandedAbstracts.value = s;
     }
     function isExpanded(id) { return expandedAbstracts.value.has(id); }
@@ -276,26 +326,55 @@ createApp({
     );
 
     /* ── Reading list ─────────────────────────────────────────── */
-    const readingList = ref(new Set());
+    const readingList      = ref(new Set());
+    const readingListDates = ref(new Map()); // id -> YYYY-MM-DD
 
     function saveReadingList() {
-      try { localStorage.setItem(STORAGE_KEY_READING, JSON.stringify([...readingList.value])); }
-      catch (_) {}
+      try {
+        localStorage.setItem(STORAGE_KEY_READING, JSON.stringify([...readingList.value]));
+        localStorage.setItem(STORAGE_KEY_READING_DATES, JSON.stringify([...readingListDates.value]));
+      } catch (_) {}
     }
     function loadReadingList() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY_READING);
         if (raw) readingList.value = new Set(JSON.parse(raw));
+        const rawDates = localStorage.getItem(STORAGE_KEY_READING_DATES);
+        if (rawDates) readingListDates.value = new Map(JSON.parse(rawDates));
       } catch (_) {}
     }
 
     function toggleBookmark(id) {
-      const s = new Set(readingList.value);
-      s.has(id) ? s.delete(id) : s.add(id);
-      readingList.value = s;
+      const s     = new Set(readingList.value);
+      const dates = new Map(readingListDates.value);
+      if (s.has(id)) {
+        s.delete(id);
+        dates.delete(id);
+      } else {
+        s.add(id);
+        // Record the displayed date (or today if unavailable)
+        dates.set(id, activeDate.value ? isoDate(activeDate.value) : isoDate(new Date()));
+      }
+      readingList.value      = s;
+      readingListDates.value = dates;
       saveReadingList();
     }
     function isBookmarked(id) { return readingList.value.has(id); }
+
+    // Group idListArticles by saved date for the reading list view
+    const idListByDate = computed(() => {
+      const grouped = new Map();
+      for (const article of idListArticles.value) {
+        const date = readingListDates.value.get(article.id) || '';
+        if (!grouped.has(date)) grouped.set(date, []);
+        grouped.get(date).push(article);
+      }
+      return [...grouped.entries()].sort((a, b) => {
+        if (!a[0]) return 1;  // unknown dates sink to bottom
+        if (!b[0]) return -1;
+        return b[0].localeCompare(a[0]); // descending
+      });
+    });
 
     const readingCount = computed(() => readingList.value.size);
 
@@ -329,7 +408,7 @@ createApp({
 
     /* ── Export ─────────────────────────────────────────────────── */
     function exportPage(format) {
-      const arts = view.value === 'idlist' ? idListArticles.value : articles.value;
+      const arts = view.value === 'idlist' ? idListArticles.value : filteredArticles.value;
       if (arts.length === 0) return;
 
       const dateLabel = view.value === 'list' && activeDate.value
@@ -464,16 +543,50 @@ createApp({
     }
 
     /* ── Helpers for template ─────────────────────────────────── */
-    const mainArticles = computed(() =>
-      articles.value.filter(a => !a.isCrosslist)
-    );
-    const crosslistArticles = computed(() =>
-      articles.value.filter(a => a.isCrosslist)
-    );
     const listCatLabels = computed(() => {
       if (!activeQuery.value) return [];
       return activeQuery.value.split(' OR ').map(s => s.replace('cat:', ''));
     });
+
+    function catMatchesFilter(primaryCategory, filterSet) {
+      if (filterSet.has(primaryCategory)) return true;
+      for (const cat of filterSet) {
+        if (primaryCategory.startsWith(cat + '.')) return true;
+      }
+      return false;
+    }
+
+    const filteredArticles = computed(() => {
+      let result = articles.value;
+      if (catFilter.value) {
+        result = result.filter(a => catMatchesFilter(a.primaryCategory, catFilter.value));
+      }
+      if (keywordFilter.value.trim()) {
+        const kw = keywordFilter.value.trim().toLowerCase();
+        result = result.filter(a =>
+          a.title.toLowerCase().includes(kw) ||
+          a.abstract.toLowerCase().includes(kw)
+        );
+      }
+      return result;
+    });
+
+    const mainArticles = computed(() =>
+      filteredArticles.value.filter(a => !a.isCrosslist)
+    );
+    const crosslistArticles = computed(() =>
+      filteredArticles.value.filter(a => a.isCrosslist)
+    );
+
+    function toggleCatFilter(cat) {
+      const current = catFilter.value ?? new Set(listCatLabels.value);
+      const next = new Set(current);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      catFilter.value = next.size === listCatLabels.value.length ? null : next;
+    }
+    function isCatFilterActive(cat) {
+      return catFilter.value === null || catFilter.value.has(cat);
+    }
 
     /* ── Hash routing ─────────────────────────────────────────── */
     async function handleRoute() {
@@ -487,16 +600,17 @@ createApp({
       } else if (route.view === 'idlist' && route.ids) {
         await fetchIdList(route.ids.split(',').filter(Boolean));
       } else if (route.view === 'mdview' && route.query && route.date) {
+        const resolvedMdDate = route.date === 'latest' ? isoDate(latestArxivDay()) : route.date;
         mdviewQuery.value = route.query;
-        mdviewDate.value  = route.date;
+        mdviewDate.value  = resolvedMdDate;
         mdviewLoading.value = true;
         mdviewError.value   = null;
         mdviewContent.value = '';
         try {
-          const url  = buildSearchUrl(route.query, dateFromIso(route.date));
+          const url  = buildSearchUrl(route.query, dateFromIso(resolvedMdDate));
           const arts = await fetchAndParseArticles(url);
-          mdviewContent.value = buildMarkdown(arts, route.query, route.date);
-          document.title = `arXiv MD — ${route.date}`;
+          mdviewContent.value = buildMarkdown(arts, route.query, resolvedMdDate);
+          document.title = `arXiv MD — ${resolvedMdDate}`;
         } catch (e) {
           mdviewError.value = e.message || 'Failed to fetch articles.';
         } finally {
@@ -509,8 +623,10 @@ createApp({
 
     /* ── Mount ────────────────────────────────────────────────── */
     onMounted(() => {
+      loadTheme();
       loadCategories();
       loadReadingList();
+      loadReadArticles();
       handleRoute();
     });
 
@@ -535,11 +651,14 @@ createApp({
       getLeafIds,
       // Articles
       articles, loading, error, skeletons,
-      mainArticles, crosslistArticles, listCatLabels,
+      mainArticles, crosslistArticles, listCatLabels, filteredArticles,
+      catFilter, toggleCatFilter, isCatFilterActive,
+      keywordFilter,
       listDateLabel, listDateFull, atLatest, goLatestDay,
       activeQuery, activeDate,
       expandedAbstracts,
       toggleAbstract, isExpanded,
+      isRead,
       retry: () => { if (activeQuery.value && activeDate.value) fetchArticleList(activeQuery.value, activeDate.value); },
       // Navigation
       goToList, goBack, prevDay, nextDay,
@@ -547,7 +666,7 @@ createApp({
       readingList, readingCount,
       toggleBookmark, isBookmarked,
       goReadingList,
-      idListArticles, idListLoading, idListError,
+      idListArticles, idListLoading, idListError, idListByDate,
       readingListShareUrl,
       emailLink,
       shareReadingList,
@@ -555,10 +674,12 @@ createApp({
       exportPage,
       // Markdown view
       mdviewContent, mdviewLoading, mdviewError, mdviewUrl, copyMdUrl, downloadMdview,
+      // Dark mode
+      darkMode, toggleDarkMode,
       // Toast & share
       toast, shareArticle,
       // Utils (used in template)
-      isoDate, formatDisplayDate,
+      isoDate, formatDisplayDate, dateFromIso,
     };
   },
 }).mount('#app');

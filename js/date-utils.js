@@ -1,13 +1,13 @@
 /* date-utils.js — arXiv date helpers (global scope, no module system) */
 
 /**
- * Most recent weekday that is strictly before today.
- * arXiv listings for day D appear on D+1 morning, so we look at yesterday.
+ * Most recent weekday on which arXiv listings are available.
+ * arXiv publishes new listings during the day, so today is included
+ * as long as it is a weekday.
  */
 function latestArxivDay() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - 1); // start from yesterday
   while (d.getDay() === 0 || d.getDay() === 6) {
     d.setDate(d.getDate() - 1);
   }

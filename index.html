@@ -25,6 +25,9 @@
         <span v-else-if="view === 'list'">— {{ listDateLabel }}</span>
         <span v-else-if="view === 'idlist'">— reading list</span>
       </span>
+      <button class="header-btn header-icon-btn" @click="toggleDarkMode" :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'">
+        {{ darkMode ? '☀' : '☾' }}
+      </button>
       <button class="header-btn" @click="goReadingList" title="View reading list">
         &#9733; Saved
         <span v-if="readingCount > 0" class="count">{{ readingCount }}</span>
@@ -190,16 +193,38 @@
           </div>
         </div>
 
+        <!-- Keyword filter -->
+        <div class="keyword-filter-row" v-if="!loading && !error && articles.length > 0">
+          <input
+            class="keyword-input"
+            type="search"
+            v-model="keywordFilter"
+            placeholder="Filter by title or abstract…"
+            autocomplete="off"
+          />
+          <span class="keyword-count" v-if="keywordFilter.trim()">
+            {{ filteredArticles.length }} match{{ filteredArticles.length !== 1 ? 'es' : '' }}
+          </span>
+        </div>
+
         <!-- Summary row (hidden when 0 results to avoid showing alongside empty-state) -->
         <div class="list-summary" v-if="!loading && !error && articles.length > 0">
-          <strong>{{ articles.length }} paper{{ articles.length !== 1 ? 's' : '' }}</strong>
+          <strong v-if="catFilter === null">{{ articles.length }} paper{{ articles.length !== 1 ? 's' : '' }}</strong>
+          <strong v-else>{{ filteredArticles.length }} of {{ articles.length }} paper{{ articles.length !== 1 ? 's' : '' }}</strong>
           <div class="summary-cats">
-            <span class="cat-badge" v-for="cat in listCatLabels" :key="cat">{{ cat }}</span>
+            <button
+              class="cat-filter-btn"
+              :class="{ inactive: !isCatFilterActive(cat) }"
+              v-for="cat in listCatLabels"
+              :key="cat"
+              @click="toggleCatFilter(cat)"
+              :title="isCatFilterActive(cat) ? 'Hide ' + cat : 'Show ' + cat"
+            >{{ cat }}</button>
           </div>
           <div class="export-btns">
             <button class="act-btn" @click="copyMdUrl"          title="Copy a permanent URL that serves this listing as plain Markdown">&#128279; MD URL</button>
-            <button class="act-btn" @click="exportPage('json')" title="Download all papers as JSON">&#8659; JSON</button>
-            <button class="act-btn" @click="exportPage('md')"   title="Download all papers as Markdown">&#8659; MD</button>
+            <button class="act-btn" @click="exportPage('json')" title="Download filtered papers as JSON">&#8659; JSON</button>
+            <button class="act-btn" @click="exportPage('md')"   title="Download filtered papers as Markdown">&#8659; MD</button>
           </div>
         </div>
 
@@ -218,6 +243,9 @@
           <div class="icon">&#9888;</div>
           <h3>Failed to load papers</h3>
           <p>{{ error }}</p>
+          <p v-if="error && error.includes('proxy')" class="error-hint">
+            The app routes requests through a free CORS proxy. If one is down, retrying will automatically try the next available option.
+          </p>
           <button class="btn-secondary" @click="retry()">Retry</button>
         </div>
 
@@ -239,7 +267,7 @@
             class="card article-card"
             v-for="article in mainArticles"
             :key="article.id"
-            :class="{ 'abstract-open': isExpanded(article.id) }"
+            :class="{ 'abstract-open': isExpanded(article.id), 'is-read': isRead(article.id) && !isExpanded(article.id) }"
           >
             <div class="article-header">
               <div class="article-badges">
@@ -264,7 +292,7 @@
               </button>
               <a class="act-btn" :href="article.absUrl" target="_blank" rel="noopener">&#128196; Abstract</a>
               <a class="act-btn" :href="article.pdfUrl" target="_blank" rel="noopener">&#128462; PDF</a>
-              <a v-if="article.htmlUrl" class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
+              <a class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
               <button class="act-btn share-btn" @click="shareArticle(article)" title="Share abstract link">
                 &#8679; Share
               </button>
@@ -285,7 +313,7 @@
               class="card article-card crosslist"
               v-for="article in crosslistArticles"
               :key="article.id"
-              :class="{ 'abstract-open': isExpanded(article.id) }"
+              :class="{ 'abstract-open': isExpanded(article.id), 'is-read': isRead(article.id) && !isExpanded(article.id) }"
             >
               <div class="article-header">
                 <div class="article-badges">
@@ -307,7 +335,7 @@
                 </button>
                 <a class="act-btn" :href="article.absUrl" target="_blank" rel="noopener">&#128196; Abstract</a>
                 <a class="act-btn" :href="article.pdfUrl" target="_blank" rel="noopener">&#128462; PDF</a>
-                <a v-if="article.htmlUrl" class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
+                <a class="act-btn" :href="article.htmlUrl" target="_blank" rel="noopener">&#127758; HTML</a>
                 <button class="act-btn share-btn" @click="shareArticle(article)">&#8679; Share</button>
                 <span class="actions-spacer"></span>
                 <button
@@ -370,10 +398,16 @@
           <button class="btn-secondary" @click="goBack">Browse papers</button>
         </div>
 
-        <!-- Articles -->
+        <!-- Articles grouped by saved date -->
+        <template v-for="[date, dateArticles] in idListByDate" :key="date">
+          <div class="section-label" v-if="date">
+            {{ formatDisplayDate(dateFromIso(date)) }}
+            <span class="section-count">({{ dateArticles.length }})</span>
+          </div>
+          <div class="section-label" v-else>Earlier</div>
         <div
           class="card article-card"
-          v-for="article in idListArticles"
+          v-for="article in dateArticles"
           :key="article.id"
           :class="{ 'abstract-open': isExpanded(article.id) }"
         >
@@ -407,6 +441,7 @@
             >{{ isBookmarked(article.id) ? '&#9733; Saved' : '&#9734; Save' }}</button>
           </div>
         </div>
+        </template><!-- /date group -->
 
       </div>
       <!-- /idlist view -->
